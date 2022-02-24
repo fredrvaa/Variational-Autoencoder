@@ -221,8 +221,8 @@ class StackedMNISTData:
 
         # Do the plotting
         plt.Figure()
-        no_rows = np.ceil(np.sqrt(no_images))
-        no_cols = np.ceil(no_images / no_rows)
+        no_rows = int(np.ceil(np.sqrt(no_images)))
+        no_cols = int(np.ceil(no_images / no_rows))
         for img_idx in range(no_images):
             plt.subplot(no_rows, no_cols, img_idx + 1)
             if self.channels == 1:

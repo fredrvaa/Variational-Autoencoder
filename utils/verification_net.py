@@ -7,7 +7,7 @@ import numpy as np
 
 class VerificationNet:
 
-    def __init__(self, force_learn: bool = False, file_name: str = "./models/verification_model") -> None:
+    def __init__(self, force_learn: bool = False, file_name: str = "./models/verification_model/verification_model") -> None:
         """
         Define model and set some parameters.
         The model is  made for classifying one channel only -- if we are looking at a

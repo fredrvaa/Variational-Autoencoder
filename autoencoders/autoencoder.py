@@ -16,21 +16,24 @@ class Autoencoder:
 
         self.encoder = Sequential([
             layers.InputLayer((28, 28, 1)),
-            layers.Conv2D(16, kernel_size=3, strides=2, activation='relu', padding='same'),
-            layers.MaxPooling2D(pool_size=(2, 2)),
-            layers.Conv2D(32, kernel_size=(2, 2), strides=(2, 2), activation='relu', padding='same'),
-            layers.MaxPooling2D(pool_size=(2, 2)),
+            layers.Conv2D(16, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
+            layers.Conv2D(16, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
+            layers.Conv2D(32, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
+            layers.Conv2D(32, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
+            layers.Conv2D(64, kernel_size=7, strides=2, activation='leaky_relu', padding='same'),
+            layers.Conv2D(64, kernel_size=7, strides=2, activation='leaky_relu', padding='same'),
             layers.Flatten(),
-            layers.Dense(64, activation='sigmoid'),
-            layers.Dense(encoding_dim),
+            layers.Dense(encoding_dim, activation='sigmoid'),
         ], name='Encoder')
 
         self.decoder = Sequential([
             layers.InputLayer((encoding_dim,)),
-            layers.Dense(16*32, activation='relu'),
-            layers.Reshape(target_shape=(16, 1, 32)),
-            layers.Conv2DTranspose(32, kernel_size=(2, 2), strides=(2, 2), padding='same'),
-            layers.Conv2DTranspose(16, kernel_size=(2, 2), strides=(2, 2), padding='same'),
+            layers.Reshape((1, 1, encoding_dim)),
+            layers.Conv2DTranspose(32, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
+            layers.Conv2DTranspose(32, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
+            layers.Conv2DTranspose(16, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
+            layers.Conv2DTranspose(16, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
+            layers.Conv2DTranspose(1, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
             layers.Flatten(),
             layers.Dense(784, activation='sigmoid'),
             layers.Reshape((28, 28))
@@ -47,7 +50,8 @@ class Autoencoder:
     def train(self, x_train: np.ndarray, epochs: int = 10, batch_size: int = 256, force_relearn: bool = False) -> None:
         if force_relearn or self.done_training is False:
             # Stack channels into grayscale images
-            x_train = x_train.transpose(3,0,1,2).reshape(-1, x_train.shape[1], x_train.shape[2])
+            if len(x_train.shape) == 4 and x_train.shape[-1] > 1:
+                x_train = x_train.transpose(3,0,1,2).reshape(-1, x_train.shape[1], x_train.shape[2])
             self.model.fit(x_train, x_train, epochs=epochs, batch_size=batch_size, verbose=2)
             # Save weights and leave
             self.model.save_weights(filepath=self.file_name)

@@ -1,49 +1,47 @@
 import numpy as np
-from tensorflow import keras
-from keras import Sequential, layers
-from keras.losses import binary_crossentropy
+import tensorflow as tf
 
 from utils.loss_history import LossHistory
 
+tfk = tf.keras
 
 class Autoencoder:
     def __init__(self,
                  encoding_dim: int = 8,
+                 image_dim: tuple[int, int] = (28, 28),
                  file_name: str = "./models/autoencoder/autoencoder"
                  ):
         self.encoding_dim: int = encoding_dim
+        self.image_dim: tuple[int, int] = image_dim
         self.file_name: str = file_name
 
-        self.encoder = Sequential([
-            layers.InputLayer((28, 28, 1)),
-            layers.Conv2D(16, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
-            layers.Conv2D(16, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
-            layers.Conv2D(32, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
-            layers.Conv2D(32, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
-            layers.Conv2D(64, kernel_size=7, strides=2, activation='leaky_relu', padding='same'),
-            layers.Conv2D(64, kernel_size=7, strides=2, activation='leaky_relu', padding='same'),
-            layers.Flatten(),
-            layers.Dense(encoding_dim, activation='sigmoid'),
+        self.encoder = tfk.Sequential([
+            tfk.layers.InputLayer((*self.image_dim, 1)),
+            tfk.layers.Conv2D(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(32, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(32, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(64, kernel_size=7, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(64, kernel_size=7, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Flatten(),
+            tfk.layers.Dense(encoding_dim, activation=tf.nn.sigmoid),
         ], name='Encoder')
 
-        self.decoder = Sequential([
-            layers.InputLayer((encoding_dim,)),
-            layers.Reshape((1, 1, encoding_dim)),
-            layers.Conv2DTranspose(32, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
-            layers.Conv2DTranspose(32, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
-            layers.Conv2DTranspose(16, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
-            layers.Conv2DTranspose(16, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
-            layers.Conv2DTranspose(1, kernel_size=5, strides=2, activation='leaky_relu', padding='same'),
-            layers.Flatten(),
-            layers.Dense(784, activation='sigmoid'),
-            layers.Reshape((28, 28))
+        self.decoder = tfk.Sequential([
+            tfk.layers.InputLayer((encoding_dim,)),
+            tfk.layers.Reshape((1, 1, encoding_dim)),
+            tfk.layers.Conv2DTranspose(32, kernel_size=7, strides=1, activation=tf.nn.leaky_relu, padding='valid'),
+            tfk.layers.Conv2DTranspose(32, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2DTranspose(32, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2DTranspose(16, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2DTranspose(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2DTranspose(16, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(1, kernel_size=5, strides=1, activation=tf.nn.sigmoid, padding='same'),
+            tfk.layers.Reshape(self.image_dim)
         ], name='Decoder')
 
-        self.model = Sequential(name='Autoencoder')
-        self.model.add(self.encoder)
-        self.model.add(self.decoder)
-        self.model.compile(loss=binary_crossentropy, optimizer=keras.optimizers.Adam())
-        #self.model.build((None, 28, 28, 1))
+        self.model = tfk.Model(name='VariationalAutoencoder', inputs=self.encoder.inputs, outputs=self.decoder(self.encoder.outputs))
+        self.model.compile(loss=tfk.losses.binary_crossentropy, optimizer=tfk.optimizers.Adam(learning_rate=1e-3))
 
         self.done_training: bool = self.load_weights()
 
@@ -51,8 +49,11 @@ class Autoencoder:
         if force_relearn or self.done_training is False:
             # Stack channels into grayscale images
             if len(x_train.shape) == 4 and x_train.shape[-1] > 1:
-                x_train = x_train.transpose(3,0,1,2).reshape(-1, x_train.shape[1], x_train.shape[2])
+                x_train = x_train.transpose(3,0,1,2).reshape(-1, x_train.shape[1], x_train.shape[2], 1)
+            x_train = np.squeeze(x_train)
+
             self.model.fit(x_train, x_train, epochs=epochs, batch_size=batch_size, verbose=2)
+
             # Save weights and leave
             self.model.save_weights(filepath=self.file_name)
             self.done_training = True
@@ -73,22 +74,20 @@ class Autoencoder:
 
     def encode(self, x: np.ndarray) -> np.ndarray:
         n_channels = x.shape[-1]
-        encoded = np.zeros((x.shape[0], self.encoding_dim, n_channels))
+        encoded = tf.Variable(tf.zeros((x.shape[0], self.encoding_dim, n_channels)))
         for n in range(n_channels):
-            encoded[:, :, n] = self.encoder.predict(x[:, :, :, n])
+            encoded[:, :, n].assign(self.encoder(np.expand_dims(x[:, :, :, n], axis=-1)))
         return encoded
 
     def decode(self, z: np.ndarray) -> np.ndarray:
         n_channels = z.shape[-1]
-        image_shape = self.decoder.layers[-1].output_shape[1:]
-        decoded = np.zeros((z.shape[0],) + image_shape + (n_channels, ))
+        decoded = np.zeros((z.shape[0], *self.image_dim, n_channels))
         for n in range(n_channels):
-            decoded[:, :, :, n] = self.decoder.predict(z[:, :, n])
+            decoded[:, :, :, n] = self.decoder(z[:, :, n])
         return decoded
 
     def __call__(self, x) -> np.ndarray:
         return self.decode(self.encode(x))
-        #return self.model.predict(x)
 
     def reconstruction_loss(self, x: np.ndarray) -> np.ndarray:
         loss_history = LossHistory()

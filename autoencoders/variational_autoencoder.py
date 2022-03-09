@@ -19,14 +19,16 @@ class VariationalAutoencoder:
     def __init__(self,
                 prior_distribution: tfd.Distribution,
                 encoding_dim: int = 8,
+                image_dim: tuple[int, int] = (28, 28),
                 file_name: str = "./models/variational_autoencoder/autoencoder",
                 ):
         self.prior_distribution: tfd.Distribution = prior_distribution
         self.encoding_dim: int = encoding_dim
+        self.image_dim: tuple[int, int] = image_dim
         self.file_name: str = file_name
 
         self.encoder = tfk.Sequential([
-            tfk.layers.InputLayer((28, 28, 1)),
+            tfk.layers.InputLayer((*self.image_dim, 1)),
             tfk.layers.Lambda(lambda x: tf.cast(x, tf.float32)),
             tfk.layers.Conv2D(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
             tfk.layers.Conv2D(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
@@ -49,7 +51,7 @@ class VariationalAutoencoder:
             tfk.layers.Conv2DTranspose(16, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
             tfk.layers.Conv2D(1, kernel_size=5, strides=1, activation=None, padding='same'),
             tfk.layers.Flatten(),
-            tfp.layers.IndependentBernoulli((28, 28), tfd.Bernoulli.logits),
+            tfp.layers.IndependentBernoulli(self.image_dim, tfd.Bernoulli.logits),
         ], name='Decoder')
 
         negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)
@@ -95,7 +97,7 @@ class VariationalAutoencoder:
 
     def decode(self, z: np.ndarray, output_measure: Measure = Measure.mean) -> np.ndarray:
         n_channels = z.shape[-1]
-        decoded = tf.Variable(tf.zeros((z.shape[0], 28, 28, n_channels)))
+        decoded = tf.Variable(tf.zeros((z.shape[0], *self.image_dim, n_channels)))
         for n in range(n_channels):
             decoded[:, :, :, n].assign(output_measure(self.decoder(z[:, :, n])))
         return decoded

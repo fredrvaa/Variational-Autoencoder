@@ -1,16 +1,13 @@
 from enum import Enum
-from importlib_metadata import distributions
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-from tensorflow import keras
-from tensorflow.keras import Sequential, layers, Model
-from tensorflow.keras.losses import binary_crossentropy
 
 from utils.loss_history import LossHistory
 
+tfk = tf.keras
 tfd = tfp.distributions
-tfb = tfp.bijectors
+
 
 class Measure(Enum):
     mean = tfd.Distribution.mean
@@ -28,39 +25,37 @@ class VariationalAutoencoder:
         self.encoding_dim: int = encoding_dim
         self.file_name: str = file_name
 
-        self.encoder = Sequential([
-            layers.InputLayer((28, 28, 1)),
-            layers.Lambda(lambda x: tf.cast(x, tf.float32)),
-            layers.Conv2D(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Conv2D(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Conv2D(32, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Conv2D(32, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Conv2D(64, kernel_size=7, strides=2, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Flatten(),
-            layers.Dense(tfp.layers.MultivariateNormalTriL.params_size(encoding_dim), activation=None),
+        self.encoder = tfk.Sequential([
+            tfk.layers.InputLayer((28, 28, 1)),
+            tfk.layers.Lambda(lambda x: tf.cast(x, tf.float32)),
+            tfk.layers.Conv2D(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(32, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(32, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(64, kernel_size=7, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Flatten(),
+            tfk.layers.Dense(tfp.layers.MultivariateNormalTriL.params_size(encoding_dim), activation=None),
             tfp.layers.MultivariateNormalTriL(encoding_dim, activity_regularizer=tfp.layers.KLDivergenceRegularizer(self.prior_distribution, weight=1.0))
         ], name='Encoder')
 
-        self.decoder = Sequential([
-            layers.InputLayer((encoding_dim,)),
-            layers.Reshape((1, 1, encoding_dim)),
-            layers.Conv2DTranspose(32, kernel_size=7, strides=1, activation=tf.nn.leaky_relu, padding='valid'),
-            layers.Conv2DTranspose(32, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Conv2DTranspose(32, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Conv2DTranspose(16, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Conv2DTranspose(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Conv2DTranspose(16, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
-            layers.Conv2D(1, kernel_size=5, strides=1, activation=None, padding='same'),
-            layers.Flatten(),
-            tfp.layers.IndependentBernoulli((28, 28), tfp.distributions.Bernoulli.logits),
+        self.decoder = tfk.Sequential([
+            tfk.layers.InputLayer((encoding_dim,)),
+            tfk.layers.Reshape((1, 1, encoding_dim)),
+            tfk.layers.Conv2DTranspose(32, kernel_size=7, strides=1, activation=tf.nn.leaky_relu, padding='valid'),
+            tfk.layers.Conv2DTranspose(32, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2DTranspose(32, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2DTranspose(16, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2DTranspose(16, kernel_size=5, strides=2, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2DTranspose(16, kernel_size=5, strides=1, activation=tf.nn.leaky_relu, padding='same'),
+            tfk.layers.Conv2D(1, kernel_size=5, strides=1, activation=None, padding='same'),
+            tfk.layers.Flatten(),
+            tfp.layers.IndependentBernoulli((28, 28), tfd.Bernoulli.logits),
         ], name='Decoder')
 
         negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)
 
-        self.model = Model(name='VariationalAutoencoder', inputs=self.encoder.inputs, outputs=self.decoder(self.encoder.outputs[0]))
-
-        self.model.compile(loss=negative_log_likelihood, optimizer=keras.optimizers.Adam(learning_rate=1e-3))
-        #self.model.build((None, 28, 28, 1))
+        self.model = tfk.Model(name='VariationalAutoencoder', inputs=self.encoder.inputs, outputs=self.decoder(self.encoder.outputs[0]))
+        self.model.compile(loss=negative_log_likelihood, optimizer=tfk.optimizers.Adam(learning_rate=1e-3))
 
         self.done_training: bool = self.load_weights()
 

@@ -2,4 +2,5 @@ numpy
 matplotlib
 keras
 tensorflow
+tensorflow-probability
 jupyter

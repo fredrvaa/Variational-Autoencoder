@@ -3,7 +3,6 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from utils.loss_history import LossHistory
 
 tfk = tf.keras
 tfd = tfp.distributions
@@ -13,6 +12,9 @@ class Measure(Enum):
     mean = tfd.Distribution.mean
     mode = tfd.Distribution.mode
     sample = tfd.Distribution.sample
+
+def negative_log_likelihood(x, rx):
+    return -rx.log_prob(x)
 
 
 class VariationalAutoencoder:
@@ -54,10 +56,10 @@ class VariationalAutoencoder:
             tfp.layers.IndependentBernoulli(self.image_dim, tfd.Bernoulli.logits),
         ], name='Decoder')
 
-        negative_log_likelihood = lambda x, rv_x: -rv_x.log_prob(x)
+        self.loss = negative_log_likelihood #tfk.losses.binary_crossentropy#lambda x, rv_x: -rv_x.log_prob(x) # Negative likelihood
 
         self.model = tfk.Model(name='VariationalAutoencoder', inputs=self.encoder.inputs, outputs=self.decoder(self.encoder.outputs[0]))
-        self.model.compile(loss=negative_log_likelihood, optimizer=tfk.optimizers.Adam(learning_rate=1e-3))
+        self.model.compile(loss=self.loss, optimizer=tfk.optimizers.Adam(learning_rate=1e-3))
 
         self.done_training: bool = self.load_weights()
 
@@ -106,9 +108,23 @@ class VariationalAutoencoder:
         return self.decode(self.encode(x), output_measure=output_measure)
 
     def reconstruction_loss(self, x: np.ndarray) -> np.ndarray:
-        loss_history = LossHistory()
-        self.model.evaluate(x, x, batch_size=1, callbacks=[loss_history])
-        return np.array(loss_history.losses)
+        return self.loss(np.squeeze(x), self.decoder(self.encoder(x))).numpy() 
+
+    def sampled_loss(self, x: np.ndarray, N: int = 10000) -> np.ndarray:
+        n_channels = x.shape[-1]
+        z = tf.reshape(self.prior_distribution.sample(N * n_channels), (N, self.encoding_dim, n_channels))
+        loss = np.zeros((x.shape[0], n_channels))
+        for n in range(n_channels):
+            print(f'Channel {n+1}')
+            x_hat = self.decoder(z[:, :, n])
+            x_c = x[:, :, :, n]
+            for i, example in enumerate(x_c):
+                if i % int(x.shape[0] / 10) == 0:
+                    print(f'{i} / {x.shape[0]}')
+                tiled = np.repeat(example[np.newaxis, :, :], N, axis=0)
+                loss[i][n] = np.mean(self.loss(tiled, x_hat))
+            print(f'{x.shape[0]} / {x.shape[0]}')
+        return np.mean(loss, axis=1)
 
     def summary(self) -> None:
         self.encoder.summary()

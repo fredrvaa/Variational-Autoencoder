@@ -90,7 +90,6 @@ class Autoencoder:
         return self.decode(self.encode(x))
 
     def reconstruction_loss(self, x: np.ndarray) -> np.ndarray:
-        print(x.shape)
         return np.sum(self.loss(x, self(x)).numpy(), axis=(1,2))
         # loss_history = LossHistory()
         # self.model.evaluate(x, x, batch_size=1, callbacks=[loss_history])

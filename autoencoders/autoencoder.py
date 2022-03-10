@@ -1,8 +1,6 @@
 import numpy as np
 import tensorflow as tf
 
-from utils.loss_history import LossHistory
-
 tfk = tf.keras
 
 class Autoencoder:
@@ -40,8 +38,10 @@ class Autoencoder:
             tfk.layers.Reshape(self.image_dim)
         ], name='Decoder')
 
+        self.loss = tfk.losses.binary_crossentropy
+
         self.model = tfk.Model(name='VariationalAutoencoder', inputs=self.encoder.inputs, outputs=self.decoder(self.encoder.outputs))
-        self.model.compile(loss=tfk.losses.binary_crossentropy, optimizer=tfk.optimizers.Adam(learning_rate=1e-3))
+        self.model.compile(loss=self.loss, optimizer=tfk.optimizers.Adam(learning_rate=1e-3))
 
         self.done_training: bool = self.load_weights()
 
@@ -90,9 +90,11 @@ class Autoencoder:
         return self.decode(self.encode(x))
 
     def reconstruction_loss(self, x: np.ndarray) -> np.ndarray:
-        loss_history = LossHistory()
-        self.model.evaluate(x, x, batch_size=1, callbacks=[loss_history])
-        return np.array(loss_history.losses)
+        print(x.shape)
+        return np.sum(self.loss(x, self(x)).numpy(), axis=(1,2))
+        # loss_history = LossHistory()
+        # self.model.evaluate(x, x, batch_size=1, callbacks=[loss_history])
+        # return np.array(loss_history.losses)
 
     def summary(self) -> None:
         self.encoder.summary()

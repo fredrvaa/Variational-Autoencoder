@@ -13,8 +13,8 @@ class Measure(Enum):
     mode = tfd.Distribution.mode
     sample = tfd.Distribution.sample
 
-def negative_log_likelihood(x, rx):
-    return -rx.log_prob(x)
+def negative_log_likelihood(x, prob):
+    return -prob.log_prob(x)
 
 
 class VariationalAutoencoder:
@@ -56,7 +56,7 @@ class VariationalAutoencoder:
             tfp.layers.IndependentBernoulli(self.image_dim, tfd.Bernoulli.logits),
         ], name='Decoder')
 
-        self.loss = negative_log_likelihood #tfk.losses.binary_crossentropy#lambda x, rv_x: -rv_x.log_prob(x) # Negative likelihood
+        self.loss = negative_log_likelihood
 
         self.model = tfk.Model(name='VariationalAutoencoder', inputs=self.encoder.inputs, outputs=self.decoder(self.encoder.outputs[0]))
         self.model.compile(loss=self.loss, optimizer=tfk.optimizers.Adam(learning_rate=1e-3))
